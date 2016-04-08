@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en-us">
+  <head>
+    <meta charset="UTF-8">
+    <title>Mockinginswift by markspanbroek</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" type="text/css" href="stylesheets/normalize.css" media="screen">
+    <link href='https://fonts.googleapis.com/css?family=Open+Sans:400,700' rel='stylesheet' type='text/css'>
+    <link rel="stylesheet" type="text/css" href="stylesheets/stylesheet.css" media="screen">
+    <link rel="stylesheet" type="text/css" href="stylesheets/github-light.css" media="screen">
+  </head>
+  <body>
+    <section class="page-header">
+      <h1 class="project-name">Mockinginswift</h1>
+      <h2 class="project-tagline">Mocking in Swift</h2>
+      <a href="https://github.com/markspanbroek/MockingInSwift" class="btn">View on GitHub</a>
+      <a href="https://github.com/markspanbroek/MockingInSwift/zipball/master" class="btn">Download .zip</a>
+      <a href="https://github.com/markspanbroek/MockingInSwift/tarball/master" class="btn">Download .tar.gz</a>
+    </section>
+
+    <section class="main-content">
+      <h1>
+<a id="to-kill-a-mocking-bird" class="anchor" href="#to-kill-a-mocking-bird" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>To Kill a Mocking Bird</h1>
+
+<h2>
+<a id="mocking-in-swift" class="anchor" href="#mocking-in-swift" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Mocking in Swift</h2>
+
+<p>Mocking in Swift is hard. Mocking frameworks traditionally depend on a number of language features to do their work. They typically need to ensure that a mock object is interchangeable with a real object and they need to intercept method calls to be able to record the fact that they were called.</p>
+
+<p>So in languages like Javascript or Ruby which have no compile time type checking of and allow any method call to be intercepted, writing a mocking framework is almost a trivial exercise. With Swifts heavy static type checking and no way to intercept method calls, mocking becomes troublesome.</p>
+
+<p>This explains the absence of mocking frameworks in Swift. But not all is lost. We will expand upon a number of techniques that, although they are a bit more cumbersome than simply using a mocking framework, will allow you to create mocks in your tests.</p>
+
+<h3>
+<a id="your-own-classes" class="anchor" href="#your-own-classes" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Your own classes</h3>
+
+<p>There is a relatively easy way to mock classes in Swift when they are under your control. Let’s assume that we are writing an app that talks to a backend using a class called ‘Backend’:</p>
+
+<div class="highlight highlight-source-swift"><pre><span class="pl-k">class</span> Backend {
+    <span class="pl-k">func</span> <span class="pl-en">storeItem</span>(item: Item) {
+        <span class="pl-c">// makes http POST call</span>
+    }
+}
+
+<span class="pl-k">class</span> Item {}</pre></div>
+
+<p>If we wish to mock this class then all we have to do is extract a protocol, and ensure that we use the protocol instead of the class throughout the app:</p>
+
+<div class="highlight highlight-source-swift"><pre><span class="pl-k">protocol</span> BackendType {
+    <span class="pl-k">func</span> <span class="pl-en">storeItem</span>(item: Item)
+}
+
+<span class="pl-k">extension</span> Backend <span class="pl-k">:</span> BackendType {}</pre></div>
+
+<p>In your tests you can now introduce a mock variant of the Backend by providing a second implementation of the BackendType protocol:</p>
+
+<div class="highlight highlight-source-swift"><pre><span class="pl-k">class</span> BackendMock <span class="pl-k">:</span> BackendType {
+    <span class="pl-k">var</span> latestItem: Item?
+
+    <span class="pl-k">func</span> <span class="pl-en">storeItem</span>(item: Item) {
+        latestItem <span class="pl-k">=</span> item
+    }
+}</pre></div>
+
+<p>Notice that it now become easy to introduce a method that checks that the storeItem method was called with the correct parameter:</p>
+
+<div class="highlight highlight-source-swift"><pre><span class="pl-k">import</span> <span class="pl-c1">XCTest</span>
+
+<span class="pl-k">extension</span> BackendMock {
+    <span class="pl-k">func</span> <span class="pl-en">verifyLatestItemEquals</span>(expected: Item) {
+        XCTAssertTrue(latestItem <span class="pl-k">===</span> expected)
+    }
+}</pre></div>
+
+<p>For more about introducing protocols in your code and why that is such a good idea, I refer you to the excellent <a href="https://developer.apple.com/videos/play/wwdc2015/408/">WWDC video about Protocol Oriented Programming in Swift</a>.</p>
+
+<h3>
+<a id="third-party-classes" class="anchor" href="#third-party-classes" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Third party classes</h3>
+
+<p>Things become a bit more complex when the classes that you want to mock are not under your control. For instance when you want to mock a class from a system library.</p>
+
+<p>Let’s assume that we wish to use Apple’s Core Bluetooth framework. It contains a class called CBCentralManager, which has a method for connecting to a Bluetooth peripheral:</p>
+
+<div class="highlight highlight-source-swift"><pre><span class="pl-k">func</span> <span class="pl-en">connectPeripheral</span>(peripheral: CBPeripheral,
+                           options: [<span class="pl-c1">String</span> <span class="pl-k">:</span> <span class="pl-c1">AnyObject</span>]?)</pre></div>
+
+<p>If we were to apply the same strategy as before, we would extract a protocol from CBPeripheral and change the signature of the connectPeripheral method such that the type of the peripheral parameter is no longer a class but a protocol.</p>
+
+<p>Because both the CBCentralManager class and the CBPeripheral class are part of Apple’s framework, we cannot do that.</p>
+
+<p>Luckily there are two strategies that we can apply.</p>
+
+<h3>
+<a id="wrapping" class="anchor" href="#wrapping" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Wrapping</h3>
+
+<p>A standard technique when dealing with hard-to-mock classes is to wrap them. In Swift we can use a slightly nicer variation using extensions.</p>
+
+<p>In our Bluetooth example we would first extract a protocol for CBPeripheral:</p>
+
+<div class="highlight highlight-source-swift"><pre><span class="pl-k">import</span> <span class="pl-c1">CoreBluetooth</span>
+
+<span class="pl-k">protocol</span> CBPeripheralType: <span class="pl-k">class</span> {}
+
+<span class="pl-k">extension</span> CBPeripheral: CBPeripheralType {}</pre></div>
+
+<p>Then we extract a protocol for CBCentralManager where we take care to replace the occurrence of CBPeripheral with CBPeripheralType:</p>
+
+<div class="highlight highlight-source-swift"><pre><span class="pl-k">protocol</span> CBCentralManagerType {
+    <span class="pl-k">func</span> <span class="pl-en">connectPeripheral</span>(peripheral: CBPeripheralType, options: [<span class="pl-c1">String</span>: <span class="pl-c1">AnyObject</span>]?)
+}</pre></div>
+
+<p>By wrapping the connectPeripheral method we ensure that CBCentralManager conforms to the new protocol:</p>
+
+<div class="highlight highlight-source-swift"><pre><span class="pl-k">extension</span> CBCentralManager: CBCentralManagerType {
+    <span class="pl-k">func</span> <span class="pl-en">connectPeripheral</span>(peripheral: CBPeripheralType, options: [<span class="pl-c1">String</span>: <span class="pl-c1">AnyObject</span>]?) {
+        <span class="pl-k">if</span> <span class="pl-k">let</span> realPeripheral <span class="pl-k">=</span> peripheral <span class="pl-k">as?</span> CBPeripheral {
+            connectPeripheral(realPeripheral, options: options)
+        }
+    }
+}</pre></div>
+
+<p>Now we are free to introduce mocks for both CBCentralManager and CBPeripheral:</p>
+
+<div class="highlight highlight-source-swift"><pre><span class="pl-k">class</span> CBPeripheralMock: CBPeripheralType {}
+
+<span class="pl-k">class</span> CBCentralManagerMock: CBCentralManagerType {
+    <span class="pl-k">var</span> latestPeripheral: CBPeripheralType?
+
+    <span class="pl-k">func</span> <span class="pl-en">connectPeripheral</span>(peripheral: CBPeripheralType, options: [<span class="pl-c1">String</span> <span class="pl-k">:</span> <span class="pl-c1">AnyObject</span>]?) {
+            latestPeripheral <span class="pl-k">=</span> peripheral
+    }
+}</pre></div>
+
+<p>And we can create a method for checking that the correct peripheral was connected:</p>
+
+<div class="highlight highlight-source-swift"><pre><span class="pl-k">extension</span> CBCentralManagerMock {
+    <span class="pl-k">func</span> <span class="pl-en">verifyLatestPeripheralEquals</span>(expected: CBPeripheralType) {
+        XCTAssertTrue(latestPeripheral <span class="pl-k">===</span> expected)
+    }
+}</pre></div>
+
+<h3>
+<a id="cheating" class="anchor" href="#cheating" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Cheating</h3>
+
+<p>Should you wish to avoid introducing protocols for all classes in a third-party framework then there’s another option. You can create your mocks in Objective-C using a mocking framework. This  could be considered cheating because it is not a pure Swift solution and it will not work for mocking pure Swift frameworks.</p>
+
+<p>But sometimes cheating is a winning strategy.</p>
+
+<p>Going back to our Bluetooth example, we will introduce a mock for CBPeripheral in Objective-C using the <a href="https://github.com/jonreid/OCMockito">OCMockito framework</a>:</p>
+
+<div class="highlight highlight-source-objc"><pre>@import OCMockito;
+@import CoreBluetooth;
+
+<span class="pl-k">@interface</span> <span class="pl-en">CBPeripheralMock</span>: <span class="pl-e">NSObject</span>
+<span class="pl-k">@property</span>(<span class="pl-k">readonly</span>, <span class="pl-k">nonatomic</span>) CBPeripheral *mock;
+<span class="pl-k">@end</span>
+
+<span class="pl-k">@implementation</span> <span class="pl-en">CBPeripheralMock</span>
+
+- (<span class="pl-k">instancetype</span>)<span class="pl-en">init</span>
+{
+    self = [<span class="pl-v">super</span> <span class="pl-c1">init</span>];
+    <span class="pl-k">if</span> (self) {
+        _mock = <span class="pl-c1">mock</span>(CBPeripheral.<span class="pl-smi">class</span>);
+    }
+    <span class="pl-k">return</span> self;
+}
+<span class="pl-k">@end</span></pre></div>
+
+<p>And also a mock for the CBCentralManager:</p>
+
+<div class="highlight highlight-source-objc"><pre>@import OCMockito
+@import OCHamcrest;
+@import CoreBluetooth;
+
+<span class="pl-k">@interface</span> <span class="pl-en">CBCentralManagerMock</span>: <span class="pl-e">NSObject</span>
+<span class="pl-k">@property</span>(<span class="pl-k">readonly</span>, <span class="pl-k">nonatomic</span>) CBCentralManager *mock;
+<span class="pl-k">@end</span>
+
+<span class="pl-k">@implementation</span> <span class="pl-en">CBCentralManagerMock</span>
+- (<span class="pl-k">instancetype</span>)<span class="pl-en">init</span> {
+    _mock = <span class="pl-c1">mock</span>(CBCentralManagerMock.<span class="pl-smi">class</span>)
+}
+
+- (<span class="pl-k">void</span>)<span class="pl-en">verifyPeripheralEquals</span><span class="pl-en">:</span>(CBPeripheral *) <span class="pl-smi">expected</span>  {
+    [<span class="pl-c1">verify</span>(<span class="pl-v">self</span>.mock) <span class="pl-c1">connectPeripheral:</span>expected
+                                 <span class="pl-c1">options:</span><span class="pl-c1">anything</span>()]
+}
+<span class="pl-k">@end</span></pre></div>
+
+<p>Using this small Objective-C layer we are now free to write the rest of the test in Swift.</p>
+
+<p>Notice that the mock class does not inherit from the class that it is mocking. Therefore it cannot be directly used in places where the real class is expected. In your tests you would use the mock property to get to the actual mock.</p>
+
+<h3>
+<a id="thanks" class="anchor" href="#thanks" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Thanks</h3>
+
+<p>Many thanks to my colleagues Berik, Derk &amp; XiaoChen for exploring these solutions with me.</p>
+
+<p>Mark Spanbroek, 2016-08-04</p>
+
+      <footer class="site-footer">
+        <span class="site-footer-owner"><a href="https://github.com/markspanbroek/MockingInSwift">Mockinginswift</a> is maintained by <a href="https://github.com/markspanbroek">markspanbroek</a>.</span>
+
+        <span class="site-footer-credits">This page was generated by <a href="https://pages.github.com">GitHub Pages</a> using the <a href="https://github.com/jasonlong/cayman-theme">Cayman theme</a> by <a href="https://twitter.com/jasonlong">Jason Long</a>.</span>
+      </footer>
+
+    </section>
+
+  
+  </body>
+</html>
