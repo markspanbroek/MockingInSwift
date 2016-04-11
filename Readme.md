@@ -4,7 +4,7 @@ To Kill a Mocking Bird
 
 Mocking in Swift is hard. Mocking frameworks traditionally depend on a number of language features to do their work. They typically need to ensure that a mock object is interchangeable with a real object and they need to intercept method calls to be able to record the fact that they were called.
 
-So in languages like Javascript or Ruby which have no compile time type checking of and allow any method call to be intercepted, writing a mocking framework is almost a trivial exercise. With Swifts heavy static type checking and no way to intercept method calls, mocking becomes troublesome.
+So in languages like Javascript or Ruby which have no compile time type checking and allow any method call to be intercepted, writing a mocking framework is almost a trivial exercise. With Swifts heavy static type checking and no way to intercept method calls, mocking becomes troublesome.
 
 This explains the absence of mocking frameworks in Swift. But not all is lost. We will expand upon a number of techniques that, although they are a bit more cumbersome than simply using a mocking framework, will allow you to create mocks in your tests.
 
