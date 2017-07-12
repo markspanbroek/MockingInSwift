@@ -75,11 +75,10 @@ Things become a bit more complex when the classes that you want to mock are not 
 Let’s assume that we wish to use Apple’s Core Bluetooth framework. It contains a class called CBCentralManager, which has a method for connecting to a Bluetooth peripheral:
 
 ```swift
-    func connectPeripheral(peripheral: CBPeripheral,
-                           options: [String : AnyObject]?)
+    func connect(peripheral: CBPeripheral, options: [String : AnyObject]?)
 ```
 
-If we were to apply the same strategy as before, we would extract a protocol from CBPeripheral and change the signature of the connectPeripheral method such that the type of the peripheral parameter is no longer a class but a protocol.
+If we were to apply the same strategy as before, we would extract a protocol from CBPeripheral and change the signature of the connect method such that the type of the peripheral parameter is no longer a class but a protocol.
 
 Because both the CBCentralManager class and the CBPeripheral class are part of Apple’s framework, we cannot do that.
 
@@ -106,19 +105,19 @@ Then we extract a protocol for CBCentralManager where we take care to replace th
 */
 
 protocol CBCentralManagerType {
-    func connectPeripheral(peripheral: CBPeripheralType, options: [String: AnyObject]?)
+    func connect(peripheral: CBPeripheralType, options: [String: AnyObject]?)
 }
 
 /*:
 
-By wrapping the connectPeripheral method we ensure that CBCentralManager conforms to the new protocol:
+By wrapping the connect method we ensure that CBCentralManager conforms to the new protocol:
 
 */
 
 extension CBCentralManager: CBCentralManagerType {
-    func connectPeripheral(peripheral: CBPeripheralType, options: [String: AnyObject]?) {
+    func connect(peripheral: CBPeripheralType, options: [String: AnyObject]?) {
         if let realPeripheral = peripheral as? CBPeripheral {
-            connectPeripheral(realPeripheral, options: options)
+            connect(realPeripheral, options: options)
         }
     }
 }
@@ -134,7 +133,7 @@ class CBPeripheralMock: CBPeripheralType {}
 class CBCentralManagerMock: CBCentralManagerType {
     var latestPeripheral: CBPeripheralType?
 
-    func connectPeripheral(peripheral: CBPeripheralType, options: [String : AnyObject]?) {
+    func connect(peripheral: CBPeripheralType, options: [String : AnyObject]?) {
             latestPeripheral = peripheral
     }
 }
